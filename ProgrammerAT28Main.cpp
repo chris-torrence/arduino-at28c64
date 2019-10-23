@@ -3,7 +3,6 @@
 #include "ProgrammerAT28.h"
 
 #include "ProgData.h"
-#define ADDRESS_MAX 1
 
 
 // Procedure to set and display registers:
@@ -87,11 +86,6 @@ byte readValue(int address)
 
 void writeSingleByte(long address, byte value)
 {
-  for (int l = 0; l < 10; l++)
-  {
-    for (int i = 2; i <= 9; i++) {
-      pinMode(i, OUTPUT);
-    }
     digitalWrite(AT28_OE_Pin, HIGH);
     digitalWrite(AT28_WE_Pin, HIGH);
     writeShiftRegister(address);
@@ -107,14 +101,11 @@ void writeSingleByte(long address, byte value)
 
     // Send a pulse to the AT28 to write the data
     digitalLow(AT28_WE_Pin);
-    delay(1);
+    delayMicroseconds(20);
     digitalHigh(AT28_WE_Pin);
-
-    currentValue = readValue(address);
-    if (currentValue == value)
-      break;
-  }
+    delayMicroseconds(100);
 }
+
 
 void disableDataProtect() {
   writeSingleByte(0x1555, 0xAA);
@@ -123,59 +114,48 @@ void disableDataProtect() {
   writeSingleByte(0x1555, 0xAA);
   writeSingleByte(0x0AAA, 0x55);
   writeSingleByte(0x1555, 0x20);
+  delay(20);
 }
+
 
 void enableDataProtect()
 {
+  delay(20);
   writeSingleByte(0x1555, 0xAA);
   writeSingleByte(0x0AAA, 0x55);
   writeSingleByte(0x1555, 0xA0);
 }
 
 
-  // Procedure to write to the AT28:
-  //   Set OE and WE high
-  //   For each address, write the address and data, then pulse WE low
-  int writeEEPROM()
-  {
-    Serial.println("");
-    Serial.println("***** WRITE *****");
-    digitalWrite(AT28_CE_Pin, LOW);
+// Procedure to write to the AT28:
+//   Set OE and WE high
+//   For each address, write the address and data, then pulse WE low
+int writeEEPROM()
+{
+  Serial.println("");
+  Serial.println("***** WRITE *****");
+  digitalWrite(AT28_CE_Pin, LOW);
 
-    disableDataProtect();
-
-    byte currentValue;
-
-    for (int address = 0; address < ADDRESS_MAX; address++)
-    {
-      byte value = pgm_read_byte_near(values + address);
-      printValue(address, value, 0);
-
-      currentValue = readValue(address);
-      if (currentValue != value)
-      {
-        writeSingleByte(address, value);
-        // for (int i=0; i <= 7; i++) {
-        //   digitalLow(9 - i);
-        // }
-        // currentValue = readValue(address);
-        // if (currentValue == value)
-        // {
-        //   currentValue = readValue(address);
-        //   if (currentValue != value)
-        //   {
-        //     Serial.println("");
-        //     Serial.println("Error writing value!");
-        //     return 0;
-        //   }
-        // }
-      }
-    }
-
-    enableDataProtect();
-    writeShiftRegister(0);
-    return 1;
+  for (int i = 2; i <= 9; i++) {
+    pinMode(i, OUTPUT);
   }
+
+//  disableDataProtect();
+
+  byte currentValue;
+
+  for (int address = 0; address < ADDRESS_MAX; address++)
+  {
+    byte value = pgm_read_byte_near(values + address);
+    printValue(address, value, 0);
+    writeSingleByte(address, value);
+  }
+
+//  enableDataProtect();
+  writeShiftRegister(0);
+  return 1;
+  }
+
 
   // Procedure to read from the AT28:
   //   Set OE low and WE high
@@ -206,12 +186,12 @@ void enableDataProtect()
       {
         printValue(address, value, 0);
       }
-      delay(1);
     }
 
     writeShiftRegister(0);
     Serial.println("");
   }
+
 
   // Procedure to read from the AT28:
   //   Set OE low and WE high

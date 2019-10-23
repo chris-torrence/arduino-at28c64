@@ -3,6 +3,8 @@
         {
             "name": "Mac",
             "includePath": [
+                "/Users/chris/Library/Arduino15/packages/sandeepmistry/tools/**",
+                "/Users/chris/Library/Arduino15/packages/sandeepmistry/hardware/nRF5/0.5.1/**",
                 "/Applications/Arduino.app/Contents/Java/tools/**",
                 "/Applications/Arduino.app/Contents/Java/hardware/arduino/avr/**"
             ],
