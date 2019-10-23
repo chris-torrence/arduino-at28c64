@@ -3,6 +3,7 @@
 #include "ProgrammerAT28.h"
 
 #include "ProgData.h"
+#define ADDRESS_MAX 1
 
 
 // Procedure to set and display registers:
@@ -83,153 +84,187 @@ byte readValue(int address)
   return actualValue;
 }
 
-// Procedure to write to the AT28:
-//   Set OE and WE high
-//   For each address, write the address and data, then pulse WE low
-int writeEEPROM()
+
+void writeSingleByte(long address, byte value)
 {
-  Serial.println("");
-  Serial.println("***** WRITE *****");
-  digitalWrite(AT28_CE_Pin, LOW);
-  byte currentValue;
-
-  for (int address=0; address < ADDRESS_MAX; address++)
+  for (int l = 0; l < 10; l++)
   {
-    byte value = pgm_read_byte_near(values + address);
-    printValue(address, value, 0);
+    for (int i = 2; i <= 9; i++) {
+      pinMode(i, OUTPUT);
+    }
+    digitalWrite(AT28_OE_Pin, HIGH);
+    digitalWrite(AT28_WE_Pin, HIGH);
+    writeShiftRegister(address);
 
-    currentValue = readValue(address);
-    if (currentValue != value)
+    // the (9 - i) translates from bit # to pin #
+    for (int i = 0; i <= 7; i++)
     {
-
-      for (int l=0; l < 10; l++)
-      {
-        for (int i=2; i <= 9; i++) pinMode(i, OUTPUT);
-        digitalWrite(AT28_OE_Pin, HIGH);
-        digitalWrite(AT28_WE_Pin, HIGH);
-        writeShiftRegister(address);
-    
-        // the (9 - i) translates from bit # to pin #
-        for (int i=0; i <= 7; i++) {
-          if (value & (1 << i)) digitalHigh(9 - i); else digitalLow(9 - i);
-        }
-    
-        // Send a pulse to the AT28 to write the data
-        digitalLow(AT28_WE_Pin);
-        delay(1);
-        digitalHigh(AT28_WE_Pin);
-        currentValue = readValue(address);
-        if (currentValue == value) break;
-      }
-
-      for (int i=0; i <= 7; i++) {
+      if (value & (1 << i))
+        digitalHigh(9 - i);
+      else
         digitalLow(9 - i);
-      }
-      currentValue = readValue(address);
-      if (currentValue == value)
-      {
-        currentValue = readValue(address);
-        if (currentValue != value)
-        {
-          Serial.println("");
-          Serial.println("Error writing value!");
-          return 0;
-        }
-      }
     }
 
+    // Send a pulse to the AT28 to write the data
+    digitalLow(AT28_WE_Pin);
+    delay(1);
+    digitalHigh(AT28_WE_Pin);
+
+    currentValue = readValue(address);
+    if (currentValue == value)
+      break;
   }
-  
-  writeShiftRegister(0);
-  return 1;
+}
+
+void disableDataProtect() {
+  writeSingleByte(0x1555, 0xAA);
+  writeSingleByte(0x0AAA, 0x55);
+  writeSingleByte(0x1555, 0x80);
+  writeSingleByte(0x1555, 0xAA);
+  writeSingleByte(0x0AAA, 0x55);
+  writeSingleByte(0x1555, 0x20);
+}
+
+void enableDataProtect()
+{
+  writeSingleByte(0x1555, 0xAA);
+  writeSingleByte(0x0AAA, 0x55);
+  writeSingleByte(0x1555, 0xA0);
 }
 
 
-// Procedure to read from the AT28:
-//   Set OE low and WE high
-//   For each address, write the address, then read the data
-void verifyEEPROM()
-{
-  Serial.println("");
-  Serial.println("***** READ *****");
-  for (int i=2; i <= 9; i++) pinMode(i, INPUT);
-  digitalWrite(AT28_CE_Pin, LOW);
-
-  for (int address=0; address < ADDRESS_MAX; address++)
+  // Procedure to write to the AT28:
+  //   Set OE and WE high
+  //   For each address, write the address and data, then pulse WE low
+  int writeEEPROM()
   {
-    int value = readValue(address);
+    Serial.println("");
+    Serial.println("***** WRITE *****");
+    digitalWrite(AT28_CE_Pin, LOW);
 
-    byte expectvalue = pgm_read_byte_near(values + address);
+    disableDataProtect();
 
-    if (expectvalue != value) {
-      printValue(address, value, 1);
-      Serial.print(" <-- Wrong value, should be: ");
-      if (expectvalue < 16) Serial.print("0");
-      Serial.println(expectvalue, HEX);
+    byte currentValue;
+
+    for (int address = 0; address < ADDRESS_MAX; address++)
+    {
+      byte value = pgm_read_byte_near(values + address);
+      printValue(address, value, 0);
+
+      currentValue = readValue(address);
+      if (currentValue != value)
+      {
+        writeSingleByte(address, value);
+        // for (int i=0; i <= 7; i++) {
+        //   digitalLow(9 - i);
+        // }
+        // currentValue = readValue(address);
+        // if (currentValue == value)
+        // {
+        //   currentValue = readValue(address);
+        //   if (currentValue != value)
+        //   {
+        //     Serial.println("");
+        //     Serial.println("Error writing value!");
+        //     return 0;
+        //   }
+        // }
+      }
+    }
+
+    enableDataProtect();
+    writeShiftRegister(0);
+    return 1;
+  }
+
+  // Procedure to read from the AT28:
+  //   Set OE low and WE high
+  //   For each address, write the address, then read the data
+  void verifyEEPROM()
+  {
+    Serial.println("");
+    Serial.println("***** READ *****");
+    for (int i = 2; i <= 9; i++)
+      pinMode(i, INPUT);
+    digitalWrite(AT28_CE_Pin, LOW);
+
+    for (int address = 0; address < ADDRESS_MAX; address++)
+    {
+      int value = readValue(address);
+
+      byte expectvalue = pgm_read_byte_near(values + address);
+
+      if (expectvalue != value)
+      {
+        printValue(address, value, 1);
+        Serial.print(" <-- Wrong value, should be: ");
+        if (expectvalue < 16)
+          Serial.print("0");
+        Serial.println(expectvalue, HEX);
+      }
+      else
+      {
+        printValue(address, value, 0);
+      }
+      delay(1);
+    }
+
+    writeShiftRegister(0);
+    Serial.println("");
+  }
+
+  // Procedure to read from the AT28:
+  //   Set OE low and WE high
+  //   For each address, write the address, then read the data
+  void readEEPROM()
+  {
+    Serial.println("");
+    Serial.println("***** READ *****");
+    for (int i = 2; i <= 9; i++)
+      pinMode(i, INPUT);
+    digitalWrite(AT28_CE_Pin, LOW);
+
+    for (int address = 0; address < ADDRESS_MAX; address++)
+    {
+      if (address % 32 == 0)
+        Serial.println("");
+      int value = readValue(address);
+      Serial.print(value);
+      Serial.print(",");
+
+      delay(1);
+    }
+
+    writeShiftRegister(0);
+    Serial.println("");
+  }
+
+  // Initial setup of all of the AT28C16/C64 pins.
+  void setupAT28()
+  {
+
+    pinMode(SER_Pin, OUTPUT);
+    pinMode(STCP_Pin, OUTPUT);
+    pinMode(SHCP_Pin, OUTPUT);
+
+    pinMode(AT28_CE_Pin, OUTPUT);
+    pinMode(AT28_WE_Pin, OUTPUT);
+    pinMode(AT28_OE_Pin, OUTPUT);
+
+    // Disable the AT28
+    digitalWrite(AT28_CE_Pin, HIGH);
+    digitalWrite(AT28_WE_Pin, HIGH);
+    digitalWrite(AT28_OE_Pin, HIGH);
+
+    for (int i = 2; i <= 9; i++)
+      pinMode(i, INPUT);
+
+    if (ADDRESS_MAX > 2048)
+    {
+      Serial.println("***** Is the switch in the UP position?! *****");
     }
     else
     {
-      printValue(address, value, 0);
+      Serial.println("***** Is the switch in the DOWN position?! *****");
     }
-    delay(1);
   }
-
-  writeShiftRegister(0);
-  Serial.println("");
-}
-
-
-// Procedure to read from the AT28:
-//   Set OE low and WE high
-//   For each address, write the address, then read the data
-void readEEPROM()
-{
-  Serial.println("");
-  Serial.println("***** READ *****");
-  for (int i=2; i <= 9; i++) pinMode(i, INPUT);
-  digitalWrite(AT28_CE_Pin, LOW);
-
-  for (int address=0; address < ADDRESS_MAX; address++)
-  {
-    if (address % 32 == 0) Serial.println("");
-    int value = readValue(address);
-    Serial.print(value);
-    Serial.print(",");
-
-    delay(1);
-  }
-
-  writeShiftRegister(0);
-  Serial.println("");
-}
-
-
-// Initial setup of all of the AT28C16/C64 pins.
-void setupAT28()
-{
-  
-  pinMode(SER_Pin, OUTPUT);
-  pinMode(STCP_Pin, OUTPUT);
-  pinMode(SHCP_Pin, OUTPUT);
-
-  pinMode(AT28_CE_Pin, OUTPUT);
-  pinMode(AT28_WE_Pin, OUTPUT);
-  pinMode(AT28_OE_Pin, OUTPUT);
-
-  // Disable the AT28
-  digitalWrite(AT28_CE_Pin, HIGH);
-  digitalWrite(AT28_WE_Pin, HIGH);
-  digitalWrite(AT28_OE_Pin, HIGH);
-
-  for (int i=2; i <= 9; i++) pinMode(i, INPUT);
-  
-  if (ADDRESS_MAX > 2048)
-  {
-    Serial.println("***** Is the switch in the UP position?! *****");
-  }
-  else
-  {
-    Serial.println("***** Is the switch in the DOWN position?! *****");
-  }
-
-}
